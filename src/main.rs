@@ -1,20 +1,18 @@
-extern crate cargo;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
-extern crate tempdir;
 extern crate curl;
 extern crate tar;
 extern crate flate2;
 extern crate semver;
 extern crate toml;
-extern crate crates_io;
+extern crate tempdir;
 
 use std::collections::{HashSet, BTreeMap};
-use std::rc::Rc;
 use std::fs::{self, File};
-use std::path::{PathBuf, Path};
+use std::path::{Path};
 use std::process::Command;
+use std::io::{Read, Write};
 use std::str;
 
 const PREFIX: &str = "rustc-ap";
@@ -39,7 +37,8 @@ fn main() {
         .nth(1)
         .unwrap();
 
-    let tmpdir = PathBuf::from("tmp");
+    let tmpdir = tempdir::TempDir::new("foo").unwrap();
+    let tmpdir = tmpdir.path();
     let dst = tmpdir.join(format!("rust-{}", commit));
     let ok = dst.join(".ok");
     if !ok.exists() {
@@ -134,7 +133,6 @@ struct Metadata {
 struct Package {
     id: String,
     name: String,
-    version: String,
     source: Option<String>,
     manifest_path: String,
 }
@@ -197,223 +195,111 @@ fn get_current_version() -> semver::Version {
 
 fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
     println!("publishing {} {}", pkg.name, vers);
-    let mut config = cargo::util::Config::default().unwrap();
-    config.configure(0, None, &None, false, true, &[]).unwrap();
-    let ws_temp = cargo::core::Workspace::new(pkg.manifest_path.as_ref(), &config).unwrap();
-    let pkg = remap_pkg(ws_temp.current().unwrap(), commit, vers, &config);
-    let ws = cargo::core::Workspace::ephemeral(pkg, &config, None, false).unwrap();
 
-    let pkg = ws.current().unwrap();
-    alter_lib_rs(pkg.manifest_path().parent().unwrap());
-
-    let tarball = cargo::ops::package(&ws, &cargo::ops::PackageOpts {
-        config: &config,
-        verify: false,
-        list: false,
-        check_metadata: false,
-        allow_dirty: true,
-        target: None,
-        jobs: None,
-        registry: None,
-    }).unwrap().unwrap();
-
-    let deps = pkg.dependencies().iter().map(|dep| {
-        crates_io::NewCrateDependency {
-            optional: dep.is_optional(),
-            default_features: dep.uses_default_features(),
-            name: dep.name().to_string(),
-            features: dep.features().to_vec(),
-            version_req: dep.version_req().to_string(),
-            target: dep.platform().map(|s| s.to_string()),
-            kind: match dep.kind() {
-                cargo::core::dependency::Kind::Normal => "normal",
-                cargo::core::dependency::Kind::Build => "build",
-                cargo::core::dependency::Kind::Development => "dev",
-            }.to_string(),
-            registry: None,
-        }
-    }).collect::<Vec<_>>();
-    let manifest = pkg.manifest();
-    let cargo::core::manifest::ManifestMetadata {
-        ref authors, ref description, ref homepage, ref documentation,
-        ref keywords, ref readme, ref repository, ref license, ref license_file,
-        ref categories, ref badges,
-    } = *manifest.metadata();
-
-    let api_host = "https://crates.io/".to_string();
-    let token = config.get_string("registry.token").unwrap().unwrap().val;
-
-    let mut registry = crates_io::Registry::new(api_host, Some(token));
-
-    registry.publish(&crates_io::NewCrate {
-        name: pkg.name().to_string(),
-        vers: pkg.version().to_string(),
-        deps: deps,
-        features: pkg.summary().features().clone(),
-        authors: authors.clone(),
-        description: description.clone(),
-        homepage: homepage.clone(),
-        documentation: documentation.clone(),
-        keywords: keywords.clone(),
-        categories: categories.clone(),
-        readme: None,
-        readme_file: readme.clone(),
-        repository: repository.clone(),
-        license: license.clone(),
-        license_file: license_file.clone(),
-        badges: badges.clone(),
-    }, tarball.file()).unwrap();
-}
-
-fn remap_pkg(pkg: &cargo::core::Package,
-             commit: &str,
-             vers: &semver::Version,
-             config: &cargo::util::Config)
-    -> cargo::core::Package
-{
-    let manifest = pkg.manifest();
-    let summary = manifest.summary();
-    let crates_io = cargo::core::SourceId::crates_io(config).unwrap();
-
-    let mut dependencies = summary.dependencies()
-        .iter()
-        .map(|d| {
-            if !d.source_id().is_path() {
-                return d.clone()
-            }
-
-            // Translate all path dependencies to depend on our version of the
-            // crates which have a new name (PREFIX) attached to them.
-            let mut dep = cargo::core::Dependency::parse_no_deprecated(
-                &format!("{}-{}", PREFIX, d.name()),
-                Some(&vers.to_string()[..]),
-                &crates_io,
-            ).unwrap();
-            dep.set_kind(d.kind());
-            dep.set_features(d.features().to_vec());
-            dep.set_default_features(d.uses_default_features());
-            dep.set_optional(d.is_optional());
-            dep.set_platform(d.platform().cloned());
-            return dep
-        })
-        .collect::<Vec<_>>();
-
-    // Inject a dependency on `term` that the crates actually pick up from the
-    // sysroot (it's a dependency of libtest). Most crates don't actually depend
-    // on `term` but some do and it's just easy to add a dependency to
-    // everything for now.
-    dependencies.push(cargo::core::Dependency::parse_no_deprecated(
-        "term",
-        Some("0.4"),
-        &crates_io,
-    ).unwrap());
-
-    // Give the summary a new package ID with the new package name
-    let summary = cargo::core::Summary::new(
-        cargo::core::PackageId::new(
-            &format!("{}-{}", PREFIX, pkg.package_id().name()),
-            &vers.to_string()[..],
-            pkg.package_id().source_id(),
-        ).unwrap(),
-        dependencies,
-        summary.features().clone(),
-    ).unwrap();
-
-    let manifest = cargo::core::Manifest::new(
-        summary,
-        manifest.targets().to_vec(),
-        manifest.include().to_vec(),
-        manifest.exclude().to_vec(),
-        manifest.links().map(|s| s.to_string()),
-
-        // Fill in some hopefully useful metadata for when anyone comes across
-        // this.
-        cargo::core::manifest::ManifestMetadata {
-            authors: vec![
-                "The Rust Project Developers".to_string(),
-            ],
-            keywords: Vec::new(),
-            categories: Vec::new(),
-            license: Some("MIT / Apache-2.0".to_string()),
-            license_file: None,
-            description: Some(format!("\
-                Automatically published version of the package `{}` \
-                in the rust-lang/rust repository from commit {} \
-            ", pkg.package_id().name(), commit)),
-            readme: None,
-            homepage: None,
-            repository: Some("https://github.com/rust-lang/rust".to_string()),
-            documentation: None,
-            badges: Default::default(),
-        },
-        manifest.profiles().clone(),
-        None,
-        Vec::new(),
-        Default::default(),
-        cargo::core::WorkspaceConfig::Member { root: None },
-        manifest.features().clone(),
-        None,
-        Rc::new(map_toml_manifest(pkg, vers, manifest.original())),
-    );
-
-    cargo::core::Package::new(manifest, pkg.manifest_path())
-}
-
-fn map_toml_manifest(pkg: &cargo::core::Package,
-                     version: &semver::Version,
-                     manifest: &cargo::util::toml::TomlManifest)
-    -> cargo::util::toml::TomlManifest
-{
-    let mut toml = toml::Value::try_from(manifest).unwrap();
+    let mut toml = String::new();
+    File::open(&pkg.manifest_path).unwrap()
+        .read_to_string(&mut toml).unwrap();
+    let mut toml: toml::Value = toml.parse().unwrap();
     {
         let toml = toml.as_table_mut().unwrap();
 
         if let Some(p) = toml.get_mut("package") {
             let p = p.as_table_mut().unwrap();
-            let name = format!("{}-{}", PREFIX, pkg.package_id().name());
-            p.insert("name".to_string(), toml::Value::String(name));
-            p.insert("version".to_string(), toml::Value::String(version.to_string()));
+
+            // Update the package's name and version to be consistent with what
+            // we're publishing, which is a new version of these two and isn't
+            // what is actually written down.
+            let name = format!("{}-{}", PREFIX, pkg.name);
+            p.insert("name".to_string(), name.into());
+            p.insert("version".to_string(), vers.to_string().into());
+
+            // Fill in some other metadata which isn't listed currently and
+            // helps the crates published be consistent.
+            p.insert("license".to_string(), "MIT / Apache-2.0".to_string().into());
+            p.insert("description".to_string(), format!("\
+                Automatically published version of the package `{}` \
+                in the rust-lang/rust repository from commit {} \
+            ", pkg.name, commit).into());
+            p.insert(
+                "repository".to_string(),
+                "https://github.com/rust-lang/rust".to_string().into(),
+            );
         }
 
+        // Fill in the `[lib]` section with an extra `name` key indicating the
+        // original name (so the crate name is right). Also remove `crate-type`
+        // so it's not compiled as a dylib.
         if let Some(lib) = toml.get_mut("lib") {
             let lib = lib.as_table_mut().unwrap();
-            let name = pkg.package_id().name().to_string();
+            let name = pkg.name.to_string();
             lib.insert("name".to_string(), toml::Value::String(name));
             lib.remove("crate-type");
         }
 
+        // A few changes to dependencies:
+        //
+        // * Remove `path` dependencies, changing them to crates.io dependencies
+        //   at the `vers` specified above
+        // * Update the name of `path` dependencies to what we're publishing,
+        //   which is crates with a prefix.
+        // * Synthesize a dependency on `term`. Currently crates depend on
+        //   `term` through the sysroot instead of via `Cargo.toml`, so we need
+        //   to change that for the published versions.
         if let Some(deps) = toml.remove("dependencies") {
+            let mut deps = deps.as_table().unwrap().iter().map(|(name, dep)| {
+                let table = match dep.as_table() {
+                    Some(s) if s.contains_key("path") => s,
+                    _ => return (name.clone(), dep.clone()),
+                };
+                let mut new_table = BTreeMap::new();
+                for (k, v) in table {
+                    if k != "path" {
+                        new_table.insert(k.to_string(), v.clone());
+                    }
+                }
+                new_table.insert(
+                    "version".to_string(),
+                    toml::Value::String(vers.to_string()),
+                );
+                (format!("{}-{}", PREFIX, name), new_table.into())
+            }).collect::<Vec<_>>();
+            deps.push(("term".to_string(), "0.4".to_string().into()));
             toml.insert(
                 "dependencies".to_string(),
-                toml::Value::Table(deps.as_table().unwrap().iter().map(|(name, dep)| {
-                    let table = match dep.as_table() {
-                        Some(s) if s.contains_key("path") => s,
-                        _ => return (name.clone(), dep.clone()),
-                    };
-                    let mut new_table = BTreeMap::new();
-                    for (k, v) in table {
-                        if k != "path" {
-                            new_table.insert(k.to_string(), v.clone());
-                        }
-                    }
-                    new_table.insert(
-                        "version".to_string(),
-                        toml::Value::String(version.to_string()),
-                    );
-                    (format!("{}-{}", PREFIX, name), new_table.into())
-                }).collect()),
+                toml::Value::Table(deps.into_iter().collect()),
             );
         }
     }
-    toml.try_into().unwrap()
+
+    let toml = toml.to_string();
+    File::create(&pkg.manifest_path).unwrap()
+        .write_all(toml.as_bytes()).unwrap();
+
+    let path = Path::new(&pkg.manifest_path).parent().unwrap();
+
+    alter_lib_rs(path);
+
+    let result = Command::new("cargo")
+        .arg("+nightly")
+        .arg("publish")
+        .arg("--allow-dirty")
+        .arg("--no-verify")
+        .current_dir(path)
+        .status()
+        .expect("failed to spawn cargo");
+    assert!(result.success());
 }
 
+// TODO: this function shouldn't be necessary, we can change upstream libsyntax
+//       to not need these modifications.
 fn alter_lib_rs(path: &Path) {
     let lib = path.join("lib.rs");
     if !lib.exists() {
         return
     }
-    let mut contents = cargo::util::paths::read(&lib).unwrap();
+    let mut contents = String::new();
+    File::open(&lib).unwrap()
+        .read_to_string(&mut contents).unwrap();
 
     // Inject #![feature(rustc_private)]. This is a hack, let's fix upstream so
     // we don't have to do this.
@@ -429,5 +315,6 @@ fn alter_lib_rs(path: &Path) {
         contents.push_str("fn _foo() {}\n");
     }
 
-    cargo::util::paths::write(&lib, contents.as_bytes()).unwrap();
+    File::create(&lib).unwrap()
+        .write_all(contents.as_bytes()).unwrap()
 }
