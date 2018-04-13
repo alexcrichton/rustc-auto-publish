@@ -67,7 +67,7 @@ fn main() {
     let mut crates = Vec::new();
     fill(&output, &syntax, &mut crates, &mut HashSet::new());
 
-    let version_to_publish = get_version_to_publish();
+    let version_to_publish = get_version_to_publish(&crates);
     println!("going to publish {}", version_to_publish);
 
     for p in crates.iter() {
@@ -148,17 +148,17 @@ struct ResolveNode {
     dependencies: Vec<String>,
 }
 
-fn get_version_to_publish() -> semver::Version {
-    let mut cur = get_current_version();
+fn get_version_to_publish(crates: &[&Package]) -> semver::Version {
+    let mut cur = crates.iter().map(|p| get_current_version(p)).max().unwrap();
     cur.major += 1;
     return cur
 }
 
-fn get_current_version() -> semver::Version {
-    println!("fetching current version");
+fn get_current_version(pkg: &Package) -> semver::Version {
+    println!("fetching current version of {}", pkg.name);
     let mut easy = curl::easy::Easy::new();
 
-    let url = format!("https://crates.io/api/v1/crates/{}-syntax", PREFIX);
+    let url = format!("https://crates.io/api/v1/crates/{}-{}", PREFIX, pkg.name);
     easy.get(true).unwrap();
     easy.url(&url).unwrap();
     easy.follow_location(true).unwrap();
