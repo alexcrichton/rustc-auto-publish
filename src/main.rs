@@ -219,6 +219,9 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
             p.insert("description".to_string(), format!("\
                 Automatically published version of the package `{}` \
                 in the rust-lang/rust repository from commit {} \
+
+                Thie publishing script for this crate lives at: \
+                https://github.com/alexcrichton/rustc-auto-publish
             ", pkg.name, commit).into());
             p.insert(
                 "repository".to_string(),
