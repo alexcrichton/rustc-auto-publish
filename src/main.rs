@@ -245,9 +245,6 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
         //   at the `vers` specified above
         // * Update the name of `path` dependencies to what we're publishing,
         //   which is crates with a prefix.
-        // * Synthesize a dependency on `term`. Currently crates depend on
-        //   `term` through the sysroot instead of via `Cargo.toml`, so we need
-        //   to change that for the published versions.
         if let Some(deps) = toml.remove("dependencies") {
             let mut deps = deps.as_table().unwrap().iter().map(|(name, dep)| {
                 let table = match dep.as_table() {
@@ -266,7 +263,6 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
                 );
                 (format!("{}-{}", PREFIX, name), new_table.into())
             }).collect::<Vec<_>>();
-            deps.push(("term".to_string(), "0.4".to_string().into()));
             toml.insert(
                 "dependencies".to_string(),
                 toml::Value::Table(deps.into_iter().collect()),
