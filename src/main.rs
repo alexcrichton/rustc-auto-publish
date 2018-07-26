@@ -18,31 +18,15 @@ use std::str;
 const PREFIX: &str = "rustc-ap";
 
 fn main() {
-    println!("Learning rustc's version");
-    let output = Command::new("rustc")
-        .arg("+nightly")
-        .arg("-vV")
-        .arg("sysroot")
-        .output()
-        .expect("failed to spawn rustc");
-    if !output.status.success() {
-        panic!("failed to run rustc: {:?}", output);
-    }
-
-    let output = str::from_utf8(&output.stdout).unwrap();
-    let commit = output.lines()
-        .find(|l| l.starts_with("commit-hash"))
-        .expect("failed to find commit hash")
-        .split(' ')
-        .nth(1)
-        .unwrap();
+    let commit = latest_master_commit();
+    println!("latest commit: {}", commit);
 
     let tmpdir = tempdir::TempDir::new("foo").unwrap();
     let tmpdir = tmpdir.path();
     let dst = tmpdir.join(format!("rust-{}", commit));
     let ok = dst.join(".ok");
     if !ok.exists() {
-        download_src(&tmpdir, commit);
+        download_src(&tmpdir, &commit);
     }
 
     println!("learning about the dependency graph");
@@ -73,6 +57,28 @@ fn main() {
     for p in crates.iter() {
         publish(p, &commit, &version_to_publish);
     }
+}
+
+fn latest_master_commit() -> String {
+    println!("Learning rustc's version");
+    let mut easy = curl::easy::Easy::new();
+    easy.get(true).unwrap();
+    easy.url("https://api.github.com/repos/rust-lang/rust/commits/master").unwrap();
+    let mut headers = curl::easy::List::new();
+    headers.append("Accept: application/vnd.github.VERSION.sha").unwrap();
+    headers.append("User-Agent: foo").unwrap();
+    easy.http_headers(headers).unwrap();
+    easy.follow_location(true).unwrap();
+    let mut data = Vec::new();
+    {
+        let mut t = easy.transfer();
+        t.write_function(|d| {
+            data.extend_from_slice(d);
+            Ok(d.len())
+        }).unwrap();
+        t.perform().unwrap();
+    }
+    String::from_utf8(data).unwrap()
 }
 
 fn download_src(dst: &Path, commit: &str) {
