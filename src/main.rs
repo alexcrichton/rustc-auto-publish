@@ -104,7 +104,7 @@ fn download_src(dst: &Path, commit: &str) {
     archive.unpack(dst).unwrap();
 
     let root = dst.join(format!("rust-{}", commit));
-    fs::rename(root.join("src/Cargo.toml"), root.join("src/Cargo.toml.bk")).unwrap();
+    fs::rename(root.join("Cargo.toml"), root.join("Cargo.toml.bk")).unwrap();
 
     File::create(&root.join(".ok")).unwrap();
 }
