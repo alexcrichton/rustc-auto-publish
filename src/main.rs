@@ -258,8 +258,13 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
                     _ => return (name.clone(), dep.clone()),
                 };
                 let mut new_table = BTreeMap::new();
+                let mut has_package = false;
                 for (k, v) in table {
-                    if k != "path" {
+                    if k == "package" {
+                        let new_name = format!("{}-{}", PREFIX, v.as_str().unwrap());
+                        new_table.insert(k.to_string(), new_name.into());
+                        has_package = true;
+                    } else if k != "path" {
                         new_table.insert(k.to_string(), v.clone());
                     }
                 }
@@ -267,7 +272,12 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
                     "version".to_string(),
                     toml::Value::String(vers.to_string()),
                 );
-                (format!("{}-{}", PREFIX, name), new_table.into())
+                let key_name = if has_package {
+                    name.clone()
+                } else {
+                    format!("{}-{}", PREFIX, name)
+                };
+                (key_name, new_table.into())
             }).collect::<Vec<_>>();
             toml.insert(
                 "dependencies".to_string(),
