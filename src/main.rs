@@ -56,6 +56,9 @@ fn main() {
 
     for p in crates.iter() {
         publish(p, &commit, &version_to_publish);
+
+        // Give the crates time to make their way into the index
+        thread::sleep(Duration::from_secs(10));
     }
 }
 
