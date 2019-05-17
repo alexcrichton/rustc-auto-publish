@@ -14,6 +14,8 @@ use std::path::{Path};
 use std::process::Command;
 use std::io::{Read, Write};
 use std::str;
+use std::time::Duration;
+use std::thread;
 
 const PREFIX: &str = "rustc-ap";
 
