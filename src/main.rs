@@ -1,21 +1,21 @@
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
 extern crate curl;
-extern crate tar;
 extern crate flate2;
 extern crate semver;
-extern crate toml;
+extern crate serde_json;
+extern crate tar;
 extern crate tempdir;
+extern crate toml;
 
-use std::collections::{HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File};
-use std::path::{Path};
-use std::process::Command;
 use std::io::{Read, Write};
+use std::path::Path;
+use std::process::Command;
 use std::str;
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 const PREFIX: &str = "rustc-ap";
 
@@ -45,7 +45,8 @@ fn main() {
     let output = str::from_utf8(&metadata.stdout).unwrap();
     let output: Metadata = serde_json::from_str(output).unwrap();
 
-    let syntax = output.packages
+    let syntax = output
+        .packages
         .iter()
         .find(|p| p.name == "syntax")
         .expect("failed to find libsyntax");
@@ -68,9 +69,12 @@ fn latest_master_commit() -> String {
     println!("Learning rustc's version");
     let mut easy = curl::easy::Easy::new();
     easy.get(true).unwrap();
-    easy.url("https://api.github.com/repos/rust-lang/rust/commits/master").unwrap();
+    easy.url("https://api.github.com/repos/rust-lang/rust/commits/master")
+        .unwrap();
     let mut headers = curl::easy::List::new();
-    headers.append("Accept: application/vnd.github.VERSION.sha").unwrap();
+    headers
+        .append("Accept: application/vnd.github.VERSION.sha")
+        .unwrap();
     headers.append("User-Agent: foo").unwrap();
     easy.http_headers(headers).unwrap();
     easy.follow_location(true).unwrap();
@@ -80,7 +84,8 @@ fn latest_master_commit() -> String {
         t.write_function(|d| {
             data.extend_from_slice(d);
             Ok(d.len())
-        }).unwrap();
+        })
+        .unwrap();
         t.perform().unwrap();
     }
     String::from_utf8(data).unwrap()
@@ -90,8 +95,10 @@ fn download_src(dst: &Path, commit: &str) {
     println!("downloading source tarball");
     let mut easy = curl::easy::Easy::new();
 
-    let url = format!("https://github.com/rust-lang/rust/archive/{}.tar.gz",
-                      commit);
+    let url = format!(
+        "https://github.com/rust-lang/rust/archive/{}.tar.gz",
+        commit
+    );
     easy.get(true).unwrap();
     easy.url(&url).unwrap();
     easy.follow_location(true).unwrap();
@@ -101,7 +108,8 @@ fn download_src(dst: &Path, commit: &str) {
         t.write_function(|d| {
             data.extend_from_slice(d);
             Ok(d.len())
-        }).unwrap();
+        })
+        .unwrap();
         t.perform().unwrap();
     }
     assert_eq!(easy.response_code().unwrap(), 200);
@@ -114,14 +122,18 @@ fn download_src(dst: &Path, commit: &str) {
     File::create(&root.join(".ok")).unwrap();
 }
 
-fn fill<'a>(output: &'a Metadata,
-            pkg: &'a Package,
-            pkgs: &mut Vec<&'a Package>,
-            seen: &mut HashSet<&'a str>) {
+fn fill<'a>(
+    output: &'a Metadata,
+    pkg: &'a Package,
+    pkgs: &mut Vec<&'a Package>,
+    seen: &mut HashSet<&'a str>,
+) {
     if !seen.insert(&pkg.name) {
-        return
+        return;
     }
-    let node = output.resolve.nodes
+    let node = output
+        .resolve
+        .nodes
         .iter()
         .find(|n| n.id == pkg.id)
         .expect("failed to find resolve node for package");
@@ -162,7 +174,7 @@ struct ResolveNode {
 fn get_version_to_publish(crates: &[&Package]) -> semver::Version {
     let mut cur = crates.iter().map(|p| get_current_version(p)).max().unwrap();
     cur.major += 1;
-    return cur
+    return cur;
 }
 
 fn get_current_version(pkg: &Package) -> semver::Version {
@@ -182,11 +194,12 @@ fn get_current_version(pkg: &Package) -> semver::Version {
         t.write_function(|d| {
             data.extend_from_slice(d);
             Ok(d.len())
-        }).unwrap();
+        })
+        .unwrap();
         t.perform().unwrap();
     }
     if easy.response_code().unwrap() == 404 {
-        return semver::Version::parse("0.0.0").unwrap()
+        return semver::Version::parse("0.0.0").unwrap();
     }
 
     assert_eq!(easy.response_code().unwrap(), 200);
@@ -211,8 +224,10 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
     println!("publishing {} {}", pkg.name, vers);
 
     let mut toml = String::new();
-    File::open(&pkg.manifest_path).unwrap()
-        .read_to_string(&mut toml).unwrap();
+    File::open(&pkg.manifest_path)
+        .unwrap()
+        .read_to_string(&mut toml)
+        .unwrap();
     let mut toml: toml::Value = toml.parse().unwrap();
     {
         let toml = toml.as_table_mut().unwrap();
@@ -230,13 +245,20 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
             // Fill in some other metadata which isn't listed currently and
             // helps the crates published be consistent.
             p.insert("license".to_string(), "MIT / Apache-2.0".to_string().into());
-            p.insert("description".to_string(), format!("\
+            p.insert(
+                "description".to_string(),
+                format!(
+                    "\
                 Automatically published version of the package `{}` \
                 in the rust-lang/rust repository from commit {} \
 
                 The publishing script for this crate lives at: \
                 https://github.com/alexcrichton/rustc-auto-publish
-            ", pkg.name, commit).into());
+            ",
+                    pkg.name, commit
+                )
+                .into(),
+            );
             p.insert(
                 "repository".to_string(),
                 "https://github.com/rust-lang/rust".to_string().into(),
@@ -260,33 +282,35 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
         // * Update the name of `path` dependencies to what we're publishing,
         //   which is crates with a prefix.
         if let Some(deps) = toml.remove("dependencies") {
-            let mut deps = deps.as_table().unwrap().iter().map(|(name, dep)| {
-                let table = match dep.as_table() {
-                    Some(s) if s.contains_key("path") => s,
-                    _ => return (name.clone(), dep.clone()),
-                };
-                let mut new_table = BTreeMap::new();
-                let mut has_package = false;
-                for (k, v) in table {
-                    if k == "package" {
-                        let new_name = format!("{}-{}", PREFIX, v.as_str().unwrap());
-                        new_table.insert(k.to_string(), new_name.into());
-                        has_package = true;
-                    } else if k != "path" {
-                        new_table.insert(k.to_string(), v.clone());
+            let mut deps = deps
+                .as_table()
+                .unwrap()
+                .iter()
+                .map(|(name, dep)| {
+                    let table = match dep.as_table() {
+                        Some(s) if s.contains_key("path") => s,
+                        _ => return (name.clone(), dep.clone()),
+                    };
+                    let mut new_table = BTreeMap::new();
+                    let mut has_package = false;
+                    for (k, v) in table {
+                        if k == "package" {
+                            let new_name = format!("{}-{}", PREFIX, v.as_str().unwrap());
+                            new_table.insert(k.to_string(), new_name.into());
+                            has_package = true;
+                        } else if k != "path" {
+                            new_table.insert(k.to_string(), v.clone());
+                        }
                     }
-                }
-                new_table.insert(
-                    "version".to_string(),
-                    toml::Value::String(vers.to_string()),
-                );
-                let key_name = if has_package {
-                    name.clone()
-                } else {
-                    format!("{}-{}", PREFIX, name)
-                };
-                (key_name, new_table.into())
-            }).collect::<Vec<_>>();
+                    new_table.insert("version".to_string(), toml::Value::String(vers.to_string()));
+                    let key_name = if has_package {
+                        name.clone()
+                    } else {
+                        format!("{}-{}", PREFIX, name)
+                    };
+                    (key_name, new_table.into())
+                })
+                .collect::<Vec<_>>();
             toml.insert(
                 "dependencies".to_string(),
                 toml::Value::Table(deps.into_iter().collect()),
@@ -295,8 +319,10 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
     }
 
     let toml = toml.to_string();
-    File::create(&pkg.manifest_path).unwrap()
-        .write_all(toml.as_bytes()).unwrap();
+    File::create(&pkg.manifest_path)
+        .unwrap()
+        .write_all(toml.as_bytes())
+        .unwrap();
 
     let path = Path::new(&pkg.manifest_path).parent().unwrap();
 
@@ -318,11 +344,13 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
 fn alter_lib_rs(path: &Path) {
     let lib = path.join("lib.rs");
     if !lib.exists() {
-        return
+        return;
     }
     let mut contents = String::new();
-    File::open(&lib).unwrap()
-        .read_to_string(&mut contents).unwrap();
+    File::open(&lib)
+        .unwrap()
+        .read_to_string(&mut contents)
+        .unwrap();
 
     // Inject #![feature(rustc_private)]. This is a hack, let's fix upstream so
     // we don't have to do this.
@@ -338,6 +366,8 @@ fn alter_lib_rs(path: &Path) {
         contents.push_str("fn _foo() {}\n");
     }
 
-    File::create(&lib).unwrap()
-        .write_all(contents.as_bytes()).unwrap()
+    File::create(&lib)
+        .unwrap()
+        .write_all(contents.as_bytes())
+        .unwrap()
 }
