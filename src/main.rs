@@ -14,6 +14,8 @@ use std::path::{Path};
 use std::process::Command;
 use std::io::{Read, Write};
 use std::str;
+use std::time::Duration;
+use std::thread;
 
 const PREFIX: &str = "rustc-ap";
 
@@ -168,7 +170,10 @@ fn get_current_version(pkg: &Package) -> semver::Version {
     let mut easy = curl::easy::Easy::new();
 
     let url = format!("https://crates.io/api/v1/crates/{}-{}", PREFIX, pkg.name);
+    let mut list = curl::easy::List::new();
+    list.append("User-Agent: rustc-auto-publish").unwrap();
     easy.get(true).unwrap();
+    easy.http_headers(list).unwrap();
     easy.url(&url).unwrap();
     easy.follow_location(true).unwrap();
     let mut data = Vec::new();
