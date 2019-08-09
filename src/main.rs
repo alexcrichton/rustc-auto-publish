@@ -354,10 +354,7 @@ fn alter_lib_rs(path: &Path) {
 
     // Inject #![feature(rustc_private)]. This is a hack, let's fix upstream so
     // we don't have to do this.
-    let needle = "\n#![feature(";
-    if let Some(i) = contents.find(needle) {
-        contents.insert_str(i + needle.len(), "rustc_private, ");
-    }
+    contents.insert_str(0, "#![feature(rustc_private)]\n");
 
     // Delete __build_diagnostic_array!. This is a hack, let's fix upstream so
     // we don't have to do this.
