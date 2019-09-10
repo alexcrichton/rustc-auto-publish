@@ -308,14 +308,8 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
                             "package".to_string(),
                             toml::Value::String(format!("{}-{}", PREFIX, name)),
                         );
-                        has_package = true;
                     }
-                    let key_name = if has_package {
-                        name.clone()
-                    } else {
-                        format!("{}-{}", PREFIX, name)
-                    };
-                    (key_name, new_table.into())
+                    (name.clone(), new_table.into())
                 })
                 .collect::<Vec<_>>();
             toml.insert(
