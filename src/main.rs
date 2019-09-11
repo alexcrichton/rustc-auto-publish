@@ -303,12 +303,13 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
                         }
                     }
                     new_table.insert("version".to_string(), toml::Value::String(vers.to_string()));
-                    let key_name = if has_package {
-                        name.clone()
-                    } else {
-                        format!("{}-{}", PREFIX, name)
-                    };
-                    (key_name, new_table.into())
+                    if !has_package {
+                        new_table.insert(
+                            "package".to_string(),
+                            toml::Value::String(format!("{}-{}", PREFIX, name)),
+                        );
+                    }
+                    (name.clone(), new_table.into())
                 })
                 .collect::<Vec<_>>();
             toml.insert(
