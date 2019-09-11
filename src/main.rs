@@ -265,9 +265,8 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
             );
         }
 
-        // Fill in the `[lib]` section with an extra `name` key indicating the
-        // original name (so the crate name is right). Also remove `crate-type`
-        // so it's not compiled as a dylib.
+        // Remove `crate-type` so it's not compiled as a dylib.
+        // Also remove `lib` to force rename the crates.
         if let Some(lib) = toml.get_mut("lib") {
             let lib = lib.as_table_mut().unwrap();
             lib.remove("name");
