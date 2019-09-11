@@ -19,8 +19,10 @@ jobs:
         curl https://sh.rustup.rs | sh -s -- -y --default-toolchain=nightly
         echo "##[add-path]$HOME/.cargo/bin"
     - run: cargo build
-    - run: echo "[registry]\ntoken =\"${{ secrets.CRATESIO_TOKEN }}\"" >> $HOME/.cargo/credentials
-      name: Configure crates.io token
+    - name: Configure crates.io token
+      run: |
+        echo "[registry]" >> $HOME/.cargo/credentials
+        echo "token = \"${{ secrets.CRATESIO_TOKEN }}\"" >> $HOME/.cargo/credentials
     - run: cargo run
       if: github.event_name != 'pull_request'
 
