@@ -1,0 +1,24 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    # Once a day at 8am run the build
+    - cron:  '0 8 * * *'
+
+jobs:
+  run:
+    name: Run
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Install Rust
+      run: rustup update nightly && rustup default nightly
+    - run: cargo build
+    - run: echo "[registry]\ntoken =\"${{ secrets.CRATESIO_TOKEN }}\"" >> $HOME/.cargo/credentials
+      name: Configure crates.io token
+    - run: cargo run
+      if: github.event_name != 'pull_request'
+
