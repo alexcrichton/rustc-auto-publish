@@ -15,7 +15,9 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install Rust
-      run: rustup update nightly && rustup default nightly
+      run: |
+        curl https://sh.rustup.rs | sh -s -- -y --default-toochain=nightly
+        echo "##[add-path]$HOME/.cargo/bin"
     - run: cargo build
     - run: echo "[registry]\ntoken =\"${{ secrets.CRATESIO_TOKEN }}\"" >> $HOME/.cargo/credentials
       name: Configure crates.io token
