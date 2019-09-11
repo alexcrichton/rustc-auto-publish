@@ -270,6 +270,7 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
         // so it's not compiled as a dylib.
         if let Some(lib) = toml.get_mut("lib") {
             let lib = lib.as_table_mut().unwrap();
+            lib.remove("name");
             lib.remove("crate-type");
         }
 
