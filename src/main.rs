@@ -20,7 +20,8 @@ use std::time::Duration;
 const PREFIX: &str = "rustc-ap";
 
 fn main() {
-    let commit = latest_master_commit();
+    let token = std::env::args().nth(1);
+    let commit = latest_master_commit(&token);
     println!("latest commit: {}", commit);
 
     let tmpdir = tempdir::TempDir::new("foo").unwrap();
@@ -65,12 +66,16 @@ fn main() {
     }
 }
 
-fn latest_master_commit() -> String {
+fn latest_master_commit(token: &Option<String>) -> String {
     println!("Learning rustc's version");
     let mut easy = curl::easy::Easy::new();
     easy.get(true).unwrap();
     easy.url("https://api.github.com/repos/rust-lang/rust/commits/master")
         .unwrap();
+    if let Some(token) = token {
+        easy.username("x-access-token").unwrap();
+        easy.password(token).unwrap();
+    }
     let mut headers = curl::easy::List::new();
     headers
         .append("Accept: application/vnd.github.VERSION.sha")
@@ -280,7 +285,7 @@ fn publish(pkg: &Package, commit: &str, vers: &semver::Version) {
         // * Update the name of `path` dependencies to what we're publishing,
         //   which is crates with a prefix.
         if let Some(deps) = toml.remove("dependencies") {
-            let mut deps = deps
+            let deps = deps
                 .as_table()
                 .unwrap()
                 .iter()
