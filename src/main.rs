@@ -32,28 +32,25 @@ fn main() {
         download_src(&tmpdir, &commit);
     }
 
+    let target_crates = vec![
+        RustcApCrate {
+            name: "syntax",
+            dir: "src/libsyntax",
+        },
+        RustcApCrate {
+            name: "rustc_parse",
+            dir: "src/librustc_parse",
+        },
+    ];
+
     println!("learning about the dependency graph");
-    let metadata = Command::new("cargo")
-        .arg("+nightly")
-        .current_dir(dst.join("src/libsyntax"))
-        .arg("metadata")
-        .arg("--format-version=1")
-        .output()
-        .expect("failed to execute cargo");
-    if !metadata.status.success() {
-        panic!("failed to run rustc: {:?}", metadata);
-    }
-    let output = str::from_utf8(&metadata.stdout).unwrap();
-    let output: Metadata = serde_json::from_str(output).unwrap();
-
-    let syntax = output
-        .packages
-        .iter()
-        .find(|p| p.name == "syntax")
-        .expect("failed to find libsyntax");
-
+    let rustc_packages = get_rustc_packages(&target_crates, &dst);
     let mut crates = Vec::new();
-    fill(&output, &syntax, &mut crates, &mut HashSet::new());
+    let mut seen = HashSet::new();
+
+    for RustcPackageInfo { package, metadata } in rustc_packages.iter() {
+        fill(&metadata, &package, &mut crates, &mut seen);
+    }
 
     let version_to_publish = get_version_to_publish(&crates);
     println!("going to publish {}", version_to_publish);
@@ -127,6 +124,39 @@ fn download_src(dst: &Path, commit: &str) {
     File::create(&root.join(".ok")).unwrap();
 }
 
+fn get_rustc_packages(target_crates: &[RustcApCrate], dst: &Path) -> Vec<RustcPackageInfo> {
+    let mut packages = Vec::new();
+
+    for RustcApCrate { name, dir } in target_crates.iter() {
+        let metadata = Command::new("cargo")
+            .arg("+nightly")
+            .current_dir(dst.join(dir))
+            .arg("metadata")
+            .arg("--format-version=1")
+            .output()
+            .expect("failed to execute cargo");
+        if !metadata.status.success() {
+            panic!("failed to run rustc: {:?}", metadata);
+        }
+        let output = str::from_utf8(&metadata.stdout).unwrap();
+        let output: Metadata = serde_json::from_str(output).unwrap();
+
+        let rustc_package = output
+            .packages
+            .iter()
+            .find(|p| p.name == *name)
+            .expect(&format!("failed to find {}", &name))
+            .clone();
+
+        packages.push(RustcPackageInfo {
+            package: rustc_package,
+            metadata: output,
+        })
+    }
+
+    packages
+}
+
 fn fill<'a>(
     output: &'a Metadata,
     pkg: &'a Package,
@@ -157,7 +187,7 @@ struct Metadata {
     resolve: Resolve,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct Package {
     id: String,
     name: String,
@@ -174,6 +204,16 @@ struct Resolve {
 struct ResolveNode {
     id: String,
     dependencies: Vec<String>,
+}
+
+struct RustcApCrate<'a> {
+    name: &'a str,
+    dir: &'a str,
+}
+
+struct RustcPackageInfo {
+    package: Package,
+    metadata: Metadata,
 }
 
 fn get_version_to_publish(crates: &[&Package]) -> semver::Version {
