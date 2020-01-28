@@ -15,9 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install Rust
-      run: |
-        curl https://sh.rustup.rs | sh -s -- -y --default-toolchain=nightly
-        echo "##[add-path]$HOME/.cargo/bin"
+      run: rustup update nightly && rustup default nightly
     - run: cargo build
     - name: Configure crates.io token
       run: |
