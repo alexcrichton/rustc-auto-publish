@@ -34,8 +34,8 @@ fn main() {
 
     let target_crates = vec![
         RustcApCrate {
-            name: "syntax",
-            dir: "src/libsyntax",
+            name: "rustc_ast",
+            dir: "src/librustc_ast",
         },
         RustcApCrate {
             name: "rustc_parse",
