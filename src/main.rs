@@ -41,6 +41,10 @@ fn main() {
             name: "rustc_parse",
             dir: "src/librustc_parse",
         },
+        RustcApCrate {
+            name: "rustc_expand",
+            dir: "src/librustc_expand",
+        },
     ];
 
     println!("learning about the dependency graph");
