@@ -1,12 +1,5 @@
 #[macro_use]
 extern crate serde_derive;
-extern crate curl;
-extern crate flate2;
-extern crate semver;
-extern crate serde_json;
-extern crate tar;
-extern crate tempdir;
-extern crate toml;
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File};
