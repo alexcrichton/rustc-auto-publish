@@ -28,15 +28,15 @@ fn main() {
     let target_crates = vec![
         RustcApCrate {
             name: "rustc_ast",
-            dir: "src/librustc_ast",
+            dir: "compiler/rustc_ast",
         },
         RustcApCrate {
             name: "rustc_parse",
-            dir: "src/librustc_parse",
+            dir: "compiler/rustc_parse",
         },
         RustcApCrate {
             name: "rustc_expand",
-            dir: "src/librustc_expand",
+            dir: "compiler/rustc_expand",
         },
     ];
 
