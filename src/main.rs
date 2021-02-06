@@ -56,7 +56,7 @@ fn main() {
         publish(p, &commit, &version_to_publish);
 
         // Give the crates time to make their way into the index
-        thread::sleep(Duration::from_secs(20));
+        thread::sleep(Duration::from_secs(45));
     }
 }
 
